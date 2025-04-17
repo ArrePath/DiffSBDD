@@ -9,7 +9,7 @@ from networkx.algorithms import isomorphism
 from Bio.PDB.Polypeptide import is_aa
 
 
-class Queue():
+class Queue:
     def __init__(self, max_len=50):
         self.items = []
         self.max_len = max_len
@@ -37,8 +37,8 @@ def reverse_tensor(x):
 
 
 def get_grad_norm(
-        parameters: Union[torch.Tensor, Iterable[torch.Tensor]],
-        norm_type: float = 2.0) -> torch.Tensor:
+    parameters: Union[torch.Tensor, Iterable[torch.Tensor]], norm_type: float = 2.0
+) -> torch.Tensor:
     """
     Adapted from: https://pytorch.org/docs/stable/_modules/torch/nn/utils/clip_grad.html#clip_grad_norm_
     """
@@ -50,13 +50,16 @@ def get_grad_norm(
     norm_type = float(norm_type)
 
     if len(parameters) == 0:
-        return torch.tensor(0.)
+        return torch.tensor(0.0)
 
     device = parameters[0].grad.device
 
-    total_norm = torch.norm(torch.stack(
-        [torch.norm(p.grad.detach(), norm_type).to(device) for p in
-         parameters]), norm_type)
+    total_norm = torch.norm(
+        torch.stack(
+            [torch.norm(p.grad.detach(), norm_type).to(device) for p in parameters]
+        ),
+        norm_type,
+    )
 
     return total_norm
 
@@ -66,13 +69,13 @@ def write_xyz_file(coords, atom_types, filename):
     assert len(coords) == len(atom_types)
     for i in range(len(coords)):
         out += f"{atom_types[i]} {coords[i, 0]:.3f} {coords[i, 1]:.3f} {coords[i, 2]:.3f}\n"
-    with open(filename, 'w') as f:
+    with open(filename, "w") as f:
         f.write(out)
 
 
 def write_sdf_file(sdf_path, molecules):
     # NOTE Changed to be compatitble with more versions of rdkit
-    #with Chem.SDWriter(str(sdf_path)) as w:
+    # with Chem.SDWriter(str(sdf_path)) as w:
     #    for mol in molecules:
     #        w.write(mol)
 
@@ -88,8 +91,8 @@ def write_sdf_file(sdf_path, molecules):
 def residues_to_atoms(x_ca, atom_encoder):
     x = x_ca
     one_hot = F.one_hot(
-        torch.tensor(atom_encoder['C'], device=x_ca.device),
-        num_classes=len(atom_encoder)
+        torch.tensor(atom_encoder["C"], device=x_ca.device),
+        num_classes=len(atom_encoder),
     ).repeat(*x_ca.shape[:-1], 1)
     return x, one_hot
 
@@ -101,7 +104,6 @@ def get_residue_with_resi(pdb_chain, resi):
 
 
 def get_pocket_from_ligand(pdb_model, ligand, dist_cutoff=8.0):
-
     if ligand.endswith(".sdf"):
         # ligand as sdf file
         rdmol = Chem.SDMolSupplier(str(ligand))[0]
@@ -109,10 +111,11 @@ def get_pocket_from_ligand(pdb_model, ligand, dist_cutoff=8.0):
         resi = None
     else:
         # ligand contained in PDB; given in <chain>:<resi> format
-        chain, resi = ligand.split(':')
+        chain, resi = ligand.split(":")
         ligand = get_residue_with_resi(pdb_model[chain], int(resi))
         ligand_coords = torch.from_numpy(
-            np.array([a.get_coord() for a in ligand.get_atoms()]))
+            np.array([a.get_coord() for a in ligand.get_atoms()])
+        )
 
     pocket_residues = []
     for residue in pdb_model.get_residues():
@@ -120,22 +123,28 @@ def get_pocket_from_ligand(pdb_model, ligand, dist_cutoff=8.0):
             continue  # skip ligand itself
 
         res_coords = torch.from_numpy(
-            np.array([a.get_coord() for a in residue.get_atoms()]))
-        if is_aa(residue.get_resname(), standard=True) \
-                and torch.cdist(res_coords, ligand_coords).min() < dist_cutoff:
+            np.array([a.get_coord() for a in residue.get_atoms()])
+        )
+        if (
+            is_aa(residue.get_resname(), standard=True)
+            and torch.cdist(res_coords, ligand_coords).min() < dist_cutoff
+        ):
             pocket_residues.append(residue)
 
     return pocket_residues
 
 
 def batch_to_list(data, batch_mask):
-    # data_list = []
-    # for i in torch.unique(batch_mask):
-    #     data_list.append(data[batch_mask == i])
-    # return data_list
+    # KST Modified 4/17/2025 to ensure both tensors are on the same device (GPU)
 
+    # make sure both tensors are on the same device (GPU)
+    device = data.device
+    batch_mask = batch_mask.to(device)
     # make sure batch_mask is increasing
     idx = torch.argsort(batch_mask)
+    # Ensure idx is on the same device as data
+    if idx.device != data.device:
+        idx = idx.to(data.device)
     batch_mask = batch_mask[idx]
     data = data[idx]
 
@@ -168,13 +177,13 @@ def rdmol_to_nxgraph(rdmol):
 
 
 def calc_rmsd(mol_a, mol_b):
-    """ Calculate RMSD of two molecules with unknown atom correspondence. """
+    """Calculate RMSD of two molecules with unknown atom correspondence."""
     graph_a = rdmol_to_nxgraph(mol_a)
     graph_b = rdmol_to_nxgraph(mol_b)
 
     gm = isomorphism.GraphMatcher(
-        graph_a, graph_b,
-        node_match=lambda na, nb: na['atom_type'] == nb['atom_type'])
+        graph_a, graph_b, node_match=lambda na, nb: na["atom_type"] == nb["atom_type"]
+    )
 
     isomorphisms = list(gm.isomorphisms_iter())
     if len(isomorphisms) < 1:
@@ -183,16 +192,20 @@ def calc_rmsd(mol_a, mol_b):
     all_rmsds = []
     for mapping in isomorphisms:
         atom_types_a = [atom.GetAtomicNum() for atom in mol_a.GetAtoms()]
-        atom_types_b = [mol_b.GetAtomWithIdx(mapping[i]).GetAtomicNum()
-                        for i in range(mol_b.GetNumAtoms())]
+        atom_types_b = [
+            mol_b.GetAtomWithIdx(mapping[i]).GetAtomicNum()
+            for i in range(mol_b.GetNumAtoms())
+        ]
         assert atom_types_a == atom_types_b
 
         conf_a = mol_a.GetConformer()
-        coords_a = np.array([conf_a.GetAtomPosition(i)
-                             for i in range(mol_a.GetNumAtoms())])
+        coords_a = np.array(
+            [conf_a.GetAtomPosition(i) for i in range(mol_a.GetNumAtoms())]
+        )
         conf_b = mol_b.GetConformer()
-        coords_b = np.array([conf_b.GetAtomPosition(mapping[i])
-                             for i in range(mol_b.GetNumAtoms())])
+        coords_b = np.array(
+            [conf_b.GetAtomPosition(mapping[i]) for i in range(mol_b.GetNumAtoms())]
+        )
 
         diff = coords_a - coords_b
         rmsd = np.sqrt(np.mean(np.sum(diff * diff, axis=1)))
@@ -211,24 +224,28 @@ class AppendVirtualNodes:
         self.vidx = atom_encoder[symbol]
 
     def __call__(self, data):
-
-        n_virt = self.max_ligand_size - data['num_lig_atoms']
-        mu = data['lig_coords'].mean(0, keepdim=True)
-        sigma = data['lig_coords'].std(0).max()
+        n_virt = self.max_ligand_size - data["num_lig_atoms"]
+        mu = data["lig_coords"].mean(0, keepdim=True)
+        sigma = data["lig_coords"].std(0).max()
         virt_coords = torch.randn(n_virt, 3) * sigma + mu
 
         # insert virtual atom column
-        one_hot = torch.cat((data['lig_one_hot'][:, :self.vidx],
-                            torch.zeros(data['num_lig_atoms'])[:, None],
-                            data['lig_one_hot'][:, self.vidx:]), dim=1)
+        one_hot = torch.cat(
+            (
+                data["lig_one_hot"][:, : self.vidx],
+                torch.zeros(data["num_lig_atoms"])[:, None],
+                data["lig_one_hot"][:, self.vidx :],
+            ),
+            dim=1,
+        )
         virt_one_hot = torch.zeros(n_virt, len(self.atom_encoder))
         virt_one_hot[:, self.vidx] = 1
-        virt_mask = torch.ones(n_virt) * data['lig_mask'][0]
+        virt_mask = torch.ones(n_virt) * data["lig_mask"][0]
 
-        data['lig_coords'] = torch.cat((data['lig_coords'], virt_coords))
-        data['lig_one_hot'] = torch.cat((one_hot, virt_one_hot))
-        data['num_lig_atoms'] = self.max_ligand_size
-        data['lig_mask'] = torch.cat((data['lig_mask'], virt_mask))
-        data['num_virtual_atoms'] = n_virt
+        data["lig_coords"] = torch.cat((data["lig_coords"], virt_coords))
+        data["lig_one_hot"] = torch.cat((one_hot, virt_one_hot))
+        data["num_lig_atoms"] = self.max_ligand_size
+        data["lig_mask"] = torch.cat((data["lig_mask"], virt_mask))
+        data["num_virtual_atoms"] = n_virt
 
         return data
